@@ -1,0 +1,103 @@
+version: '3.6'
+services:
+
+    logspout:
+        # 기본이미지 사용
+        image: rtoma/logspout-redis-logstash:0.1.8
+        container_name: logspout
+        command: 'redis://redis'
+        environment:
+            - TZ=Asia/Seoul
+            - LOGSPOUT=ignore
+            - DEBUG=true
+            - REDIS_KEY=docker-logs
+            - REDIS_LOGSTASH_TYPE=docker
+            - DEDOT_LABELS=true
+            - CONNECT_TIMEOUT=30000ms
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        networks:
+            - airflow_elk
+        depends_on:
+            - redis
+    redis:
+        # 기본이미지 사용
+        image: 'redis:5.0.5'
+        container_name: redis
+        privileged: true
+        stdin_open: true
+        tty: true
+        networks:
+            - airflow_elk
+
+    postgres:
+        # 기본이미지 사용
+        image: postgres:9.6
+        container_name: postgres
+        environment:
+            - TZ=Asia/Seoul
+            - POSTGRES_USER=airflow
+            - POSTGRES_PASSWORD=airflow
+            - POSTGRES_DB=airflow
+        privileged: true
+        stdin_open: true
+        tty: true
+        networks:
+            - airflow_elk
+
+    webserver:
+        # 빌드 필요
+        image: airflow-docker:0.1
+        container_name: webserver
+        depends_on:
+            - postgres
+            - redis
+        environment:
+            - TZ=Asia/Seoul
+            - LOAD_EX=n
+            - EXECUTOR=Celery
+        ports:
+            - "18080:18080"
+        command: webserver
+        privileged: true
+        stdin_open: true
+        tty: true
+        networks:
+            - airflow_elk
+
+    scheduler:
+        # webserver에서 빌드한 이미지 사용
+        image: airflow-docker:0.1
+        container_name: scheduler
+        depends_on:
+            - webserver
+        environment:
+            - TZ=Asia/Seoul
+            - LOAD_EX=n
+            - EXECUTOR=Celery
+        command: scheduler
+        privileged: true
+        stdin_open: true
+        tty: true
+        networks:
+            - airflow_elk
+
+    worker:
+        # webserver에서 빌드한 이미지 사용
+        image: airflow-docker:0.1
+        container_name: worker
+        depends_on:
+            - scheduler
+        environment:
+            - TZ=Asia/Seoul
+            - EXECUTOR=Celery
+        command: worker
+        privileged: true
+        stdin_open: true
+        tty: true
+        networks:
+            - airflow_elk
+
+networks:
+  airflow_elk:
+    driver: bridge
